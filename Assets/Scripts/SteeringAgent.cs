@@ -1,4 +1,20 @@
+using System.Collections.Generic;
 using UnityEngine;
+
+public enum SteeringState
+{
+    Arrive,
+    Wander,
+    Avoiding,
+    Flee,
+    Pursue
+}
+
+public enum ChaseMode
+{
+    Arrive,
+    Pursue
+}
 
 public class SteeringAgent : MonoBehaviour
 {
@@ -29,6 +45,14 @@ public class SteeringAgent : MonoBehaviour
     [SerializeField]
     private float stopRadius = 1.5f;
 
+    [Header("Level 4 - Pursue")]
+
+    [SerializeField]
+    private ChaseMode chaseMode = ChaseMode.Arrive;
+
+    [SerializeField]
+    private float maxPredictionTime = 1.5f;
+
     [Header("Wander")]
 
     [SerializeField]
@@ -48,33 +72,100 @@ public class SteeringAgent : MonoBehaviour
     [SerializeField]
     private float avoidanceWeight = 2.5f;
 
+    [Header("Level 2 - Flee")]
+
+    [SerializeField]
+    private bool enableFlee = true;
+
+    [SerializeField]
+    private float fleeRadius = 2.5f;
+
+    [SerializeField]
+    private float fleeExitBuffer = 1.5f;
+
+    [SerializeField]
+    private float fleeSpeedMultiplier = 1.3f;
+
+    [Header("Level 3 - Separation")]
+
+    [SerializeField]
+    private bool enableSeparation = true;
+
+    [SerializeField]
+    private float separationRadius = 2.5f;
+
+    [SerializeField]
+    private float separationWeight = 1.5f;
+
+    private static readonly List<SteeringAgent> activeAgents =
+        new List<SteeringAgent>();
+
     private Vector3 velocity;
     private Vector3 wanderDirection;
     private float wanderTimer;
 
+    private Vector3 targetVelocity;
+    private Vector3 lastTargetPosition;
+    private bool hasTargetSample;
+
+    private Vector3 predictedTargetPosition;
+    private bool isFleeing;
+
+    private SteeringState currentState = SteeringState.Wander;
+
     public Vector3 Velocity => velocity;
+
+    public SteeringState CurrentState => currentState;
+
+    public Vector3 PredictedTargetPosition => predictedTargetPosition;
+
+    public static IReadOnlyList<SteeringAgent> ActiveAgents => activeAgents;
+
+    private void OnEnable()
+    {
+        if (!activeAgents.Contains(this))
+        {
+            activeAgents.Add(this);
+        }
+    }
+
+    private void OnDisable()
+    {
+        activeAgents.Remove(this);
+    }
 
     private void Start()
     {
         wanderDirection = transform.forward;
         wanderTimer = wanderChangeInterval;
+
+        if (target != null)
+        {
+            lastTargetPosition = target.position;
+            hasTargetSample = true;
+        }
     }
 
     private void Update()
     {
-        Vector3 desiredVelocity;
+        TrackTargetVelocity();
 
-        if (useTarget && target != null)
-        {
-            desiredVelocity = CalculateArrive();
-        }
-        else
-        {
-            desiredVelocity = CalculateWander();
-        }
+        Vector3 desiredVelocity =
+            CalculatePrimaryBehaviour();
+
+        desiredVelocity =
+            ApplySeparation(desiredVelocity);
 
         desiredVelocity =
             ApplyObstacleAvoidance(desiredVelocity);
+
+        float speedLimit = GetCurrentSpeedLimit();
+
+        desiredVelocity =
+            Vector3.ClampMagnitude(
+                desiredVelocity,
+                speedLimit
+            );
 
         velocity =
             Vector3.MoveTowards(
@@ -86,17 +177,119 @@ public class SteeringAgent : MonoBehaviour
         velocity =
             Vector3.ClampMagnitude(
                 velocity,
-                maxSpeed
+                speedLimit
             );
 
         ApplyMovement();
         UpdateRotation();
     }
 
-    private Vector3 CalculateArrive()
+    // ------------------------------------------------------------
+    // Target velocity tracking (dipakai Pursue - Level 4)
+    // ------------------------------------------------------------
+
+    private void TrackTargetVelocity()
     {
-        Vector3 toTarget =
-            target.position - transform.position;
+        if (target == null)
+        {
+            targetVelocity = Vector3.zero;
+            hasTargetSample = false;
+            return;
+        }
+
+        Vector3 currentPosition = target.position;
+
+        if (!hasTargetSample || Time.deltaTime <= 0f)
+        {
+            lastTargetPosition = currentPosition;
+            hasTargetSample = true;
+            return;
+        }
+
+        Vector3 frameVelocity =
+            (currentPosition - lastTargetPosition) /
+            Time.deltaTime;
+
+        frameVelocity.y = 0f;
+
+        targetVelocity =
+            Vector3.Lerp(
+                targetVelocity,
+                frameVelocity,
+                0.35f
+            );
+
+        lastTargetPosition = currentPosition;
+    }
+
+    // ------------------------------------------------------------
+    // Pemilihan behaviour utama + penentuan state
+    // ------------------------------------------------------------
+
+    private Vector3 CalculatePrimaryBehaviour()
+    {
+        if (!useTarget || target == null)
+        {
+            isFleeing = false;
+            currentState = SteeringState.Wander;
+            return CalculateWander();
+        }
+
+        if (ShouldFlee())
+        {
+            currentState = SteeringState.Flee;
+            return CalculateFlee();
+        }
+
+        if (chaseMode == ChaseMode.Pursue)
+        {
+            currentState = SteeringState.Pursue;
+            return CalculatePursue();
+        }
+
+        currentState = SteeringState.Arrive;
+        predictedTargetPosition = target.position;
+
+        return CalculateArrive(target.position);
+    }
+
+    private bool ShouldFlee()
+    {
+        if (!enableFlee)
+        {
+            isFleeing = false;
+            return false;
+        }
+
+        Vector3 toTarget = target.position - transform.position;
+        toTarget.y = 0f;
+
+        float distance = toTarget.magnitude;
+
+        // Histeresis: masuk flee di fleeRadius,
+        // baru keluar setelah lewat fleeRadius + buffer.
+        float exitRadius =
+            fleeRadius + Mathf.Max(fleeExitBuffer, 0f);
+
+        if (isFleeing)
+        {
+            isFleeing = distance < exitRadius;
+        }
+        else
+        {
+            isFleeing = distance < fleeRadius;
+        }
+
+        return isFleeing;
+    }
+
+    // ------------------------------------------------------------
+    // Level 0 - Arrive
+    // ------------------------------------------------------------
+
+    private Vector3 CalculateArrive(Vector3 destination)
+    {
+        Vector3 toTarget = destination - transform.position;
 
         toTarget.y = 0f;
 
@@ -128,6 +321,10 @@ public class SteeringAgent : MonoBehaviour
         return toTarget.normalized * desiredSpeed;
     }
 
+    // ------------------------------------------------------------
+    // Level 0 - Wander
+    // ------------------------------------------------------------
+
     private Vector3 CalculateWander()
     {
         wanderTimer -= Time.deltaTime;
@@ -156,6 +353,140 @@ public class SteeringAgent : MonoBehaviour
         return wanderDirection * wanderSpeed;
     }
 
+    // ------------------------------------------------------------
+    // Level 2 - Flee
+    // ------------------------------------------------------------
+
+    private Vector3 CalculateFlee()
+    {
+        Vector3 awayFromTarget =
+            transform.position - target.position;
+
+        awayFromTarget.y = 0f;
+
+        if (awayFromTarget.sqrMagnitude < 0.001f)
+        {
+            // Posisi hampir menumpuk: kabur ke arah acak
+            // supaya tidak terjadi pembagian nol.
+            awayFromTarget =
+                new Vector3(
+                    Random.Range(-1f, 1f),
+                    0f,
+                    Random.Range(-1f, 1f)
+                );
+        }
+
+        predictedTargetPosition = target.position;
+
+        return awayFromTarget.normalized *
+               maxSpeed *
+               Mathf.Max(fleeSpeedMultiplier, 0.01f);
+    }
+
+    // ------------------------------------------------------------
+    // Level 4 - Pursue (Arrive ke posisi prediksi)
+    // ------------------------------------------------------------
+
+    private Vector3 CalculatePursue()
+    {
+        Vector3 toTarget = target.position - transform.position;
+        toTarget.y = 0f;
+
+        float distance = toTarget.magnitude;
+        float currentSpeed = velocity.magnitude;
+
+        float predictionTime;
+
+        if (currentSpeed <= distance / Mathf.Max(maxPredictionTime, 0.001f))
+        {
+            // NPC terlalu lambat / target terlalu jauh:
+            // pakai prediksi maksimum.
+            predictionTime = maxPredictionTime;
+        }
+        else
+        {
+            predictionTime = distance / Mathf.Max(currentSpeed, 0.001f);
+
+            predictionTime =
+                Mathf.Min(predictionTime, maxPredictionTime);
+        }
+
+        predictedTargetPosition =
+            target.position + targetVelocity * predictionTime;
+
+        return CalculateArrive(predictedTargetPosition);
+    }
+
+    // ------------------------------------------------------------
+    // Level 3 - Separation antar-NPC
+    // ------------------------------------------------------------
+
+    private Vector3 ApplySeparation(Vector3 desiredVelocity)
+    {
+        if (!enableSeparation || separationRadius <= 0f)
+        {
+            return desiredVelocity;
+        }
+
+        Vector3 separation = Vector3.zero;
+        int neighbourCount = 0;
+
+        for (int i = 0; i < activeAgents.Count; i++)
+        {
+            SteeringAgent other = activeAgents[i];
+
+            if (other == null || other == this)
+            {
+                continue;
+            }
+
+            Vector3 offset =
+                transform.position - other.transform.position;
+
+            offset.y = 0f;
+
+            float distance = offset.magnitude;
+
+            if (distance > separationRadius)
+            {
+                continue;
+            }
+
+            if (distance < 0.0001f)
+            {
+                offset =
+                    new Vector3(
+                        Random.Range(-1f, 1f),
+                        0f,
+                        Random.Range(-1f, 1f)
+                    );
+
+                distance = 0.0001f;
+            }
+
+            // Semakin dekat, semakin kuat dorongannya.
+            float strength =
+                1f - Mathf.Clamp01(distance / separationRadius);
+
+            separation += offset.normalized * strength;
+            neighbourCount++;
+        }
+
+        if (neighbourCount == 0)
+        {
+            return desiredVelocity;
+        }
+
+        separation /= neighbourCount;
+
+        return desiredVelocity +
+               separation * maxSpeed * separationWeight;
+    }
+
+    // ------------------------------------------------------------
+    // Level 1 pendukung - Obstacle Avoidance
+    // ------------------------------------------------------------
+
     private Vector3 ApplyObstacleAvoidance(
         Vector3 desiredVelocity)
     {
@@ -176,6 +507,8 @@ public class SteeringAgent : MonoBehaviour
 
         if (avoidanceDirection.sqrMagnitude > 0.001f)
         {
+            currentState = SteeringState.Avoiding;
+
             Vector3 combinedDirection =
                 checkDirection +
                 avoidanceDirection *
@@ -198,6 +531,23 @@ public class SteeringAgent : MonoBehaviour
         }
 
         return desiredVelocity;
+    }
+
+    // ------------------------------------------------------------
+    // Gerak & rotasi
+    // ------------------------------------------------------------
+
+    private float GetCurrentSpeedLimit()
+    {
+        // Pakai flag isFleeing, bukan currentState, karena state
+        // bisa berubah jadi Avoiding sambil NPC tetap kabur.
+        if (isFleeing)
+        {
+            return maxSpeed *
+                   Mathf.Max(fleeSpeedMultiplier, 0.01f);
+        }
+
+        return maxSpeed;
     }
 
     private void ApplyMovement()
@@ -229,23 +579,69 @@ public class SteeringAgent : MonoBehaviour
             );
     }
 
+    // ------------------------------------------------------------
+    // Gizmos
+    // ------------------------------------------------------------
+
     private void OnDrawGizmosSelected()
     {
-        Gizmos.DrawWireSphere(
-            transform.position,
-            stopRadius
-        );
+        Vector3 position = transform.position;
 
-        Gizmos.DrawWireSphere(
-            transform.position,
-            slowRadius
-        );
+        // Arrive: stop radius (merah) & slow radius (oranye)
+        Gizmos.color = Color.red;
+        Gizmos.DrawWireSphere(position, stopRadius);
 
-        if (target != null)
+        Gizmos.color = new Color(1f, 0.6f, 0f);
+        Gizmos.DrawWireSphere(position, slowRadius);
+
+        // Flee radius (magenta) & exit radius (magenta pudar)
+        if (enableFlee)
         {
+            Gizmos.color = Color.magenta;
+            Gizmos.DrawWireSphere(position, fleeRadius);
+
+            Gizmos.color = new Color(1f, 0f, 1f, 0.35f);
+
+            Gizmos.DrawWireSphere(
+                position,
+                fleeRadius + Mathf.Max(fleeExitBuffer, 0f)
+            );
+        }
+
+        // Separation radius (cyan)
+        if (enableSeparation)
+        {
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawWireSphere(position, separationRadius);
+        }
+
+        if (target == null)
+        {
+            return;
+        }
+
+        Gizmos.color = Color.white;
+        Gizmos.DrawLine(position, target.position);
+
+        // Pursue: titik prediksi (hijau)
+        if (Application.isPlaying &&
+            chaseMode == ChaseMode.Pursue)
+        {
+            Gizmos.color = Color.green;
+
             Gizmos.DrawLine(
-                transform.position,
-                target.position
+                target.position,
+                predictedTargetPosition
+            );
+
+            Gizmos.DrawWireSphere(
+                predictedTargetPosition,
+                0.35f
+            );
+
+            Gizmos.DrawLine(
+                position,
+                predictedTargetPosition
             );
         }
     }

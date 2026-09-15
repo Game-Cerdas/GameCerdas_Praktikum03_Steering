@@ -134,6 +134,7 @@ GameObject:
   - component: {fileID: 68657054}
   - component: {fileID: 68657055}
   - component: {fileID: 68657056}
+  - component: {fileID: 68657057}
   m_Layer: 0
   m_Name: NPC
   m_TagString: Untagged
@@ -274,11 +275,20 @@ MonoBehaviour:
   turnSpeed: 8
   slowRadius: 2
   stopRadius: 1.5
+  chaseMode: 0
+  maxPredictionTime: 1.5
   wanderSpeed: 2.5
   wanderChangeInterval: 1.5
   wanderAngleChange: 45
   sensor: {fileID: 68657054}
   avoidanceWeight: 1
+  enableFlee: 1
+  fleeRadius: 2.5
+  fleeExitBuffer: 1.5
+  fleeSpeedMultiplier: 1.3
+  enableSeparation: 1
+  separationRadius: 2.5
+  separationWeight: 1.5
 --- !u!114 &68657056
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -293,6 +303,26 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::SteeringDebug
   agent: {fileID: 68657055}
   velocityScale: 1
+--- !u!114 &68657057
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 68657049}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f8df08b3467445d8b5e4fcc6126f01ca, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SteeringAgentVisual
+  agent: {fileID: 68657055}
+  targetRenderer: {fileID: 68657051}
+  arriveColor: {r: 1, g: 0.1, b: 0.1, a: 1}
+  wanderColor: {r: 0.2, g: 0.45, b: 1, a: 1}
+  avoidingColor: {r: 1, g: 0.85, b: 0, a: 1}
+  fleeColor: {r: 1, g: 0.2, b: 1, a: 1}
+  pursueColor: {r: 0.1, g: 0.9, b: 0.3, a: 1}
+  colorLerpSpeed: 10
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -1322,6 +1352,62 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1900000000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1900000001}
+  - component: {fileID: 1900000002}
+  m_Layer: 0
+  m_Name: NPCSpawner
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1900000001
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1900000000}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1900000002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1900000000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d26df01f411443d48c2f9c50bce16322, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::NPCSpawner
+  npcSource: {fileID: 68657049}
+  includeSourceInCount: 1
+  npcCount: 6
+  spawnCenter: {fileID: 0}
+  spawnRadius: 6
+  minSpacing: 1.8
+  maxPlacementAttempts: 30
+  blockedMask:
+    serializedVersion: 2
+    m_Bits: 64
+  clearanceRadius: 0.6
+  randomizeRotation: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -1336,3 +1422,4 @@ SceneRoots:
   - {fileID: 493164832}
   - {fileID: 1222334410}
   - {fileID: 1258705183}
+  - {fileID: 1900000001}
