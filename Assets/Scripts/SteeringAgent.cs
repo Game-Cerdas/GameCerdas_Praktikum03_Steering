@@ -105,6 +105,36 @@ public class SteeringAgent : MonoBehaviour
     [SerializeField]
     private float boundaryEscapeWeight = 3f;
 
+    [Header("Vision - Gun Flee")]
+
+    [SerializeField]
+    private PlayerVisionSensor visionSensor;
+
+    [SerializeField]
+    private float fleeSpeed = 6f;
+
+    [Header("Help Call")]
+
+    [SerializeField]
+    private float alertWaitDuration = 2f;
+
+    [Header("Gun Reaction")]
+
+    [SerializeField]
+    private float fleeProximityThreshold = 4f;
+
+    [SerializeField]
+    private float panicFleeSpeed = 7f;
+
+    [SerializeField]
+    private float panicFleeDuration = 6f;
+
+    private enum GunReaction
+    {
+        None,
+        Panicking
+    }
+
     private static readonly List<SteeringAgent> activeAgents =
         new List<SteeringAgent>();
 
@@ -118,6 +148,14 @@ public class SteeringAgent : MonoBehaviour
 
     private Vector3 predictedTargetPosition;
     private bool isFleeing;
+    private bool isFleeingFromGun;
+
+    private bool isAlerted;
+    private bool hasArrivedAtCaller;
+    private float alertWaitTimer;
+
+    private GunReaction gunReaction = GunReaction.None;
+    private float panicTimer;
 
     private SteeringState currentState = SteeringState.Wander;
 
@@ -157,6 +195,8 @@ public class SteeringAgent : MonoBehaviour
     private void Update()
     {
         TrackTargetVelocity();
+        UpdateGunReaction();
+        UpdateAlertState();
 
         Vector3 desiredVelocity =
             CalculatePrimaryBehaviour();
@@ -234,11 +274,80 @@ public class SteeringAgent : MonoBehaviour
     }
 
     // ------------------------------------------------------------
+    // Help Call - dipanggil dari PlayerAlert
+    // ------------------------------------------------------------
+
+    // dipanggil saat dengar teriakan minta tolong
+    public void OnHelpCallHeard(Transform caller)
+    {
+        if (target == null)
+        {
+            target = caller;
+        }
+
+        useTarget = true;
+        isAlerted = true;
+        hasArrivedAtCaller = false;
+    }
+
+    // kelola status bubar setelah sampai lokasi panggilan
+    private void UpdateAlertState()
+    {
+        if (!isAlerted || target == null)
+        {
+            return;
+        }
+
+        float distance =
+            Vector3.Distance(transform.position, target.position);
+
+        if (!hasArrivedAtCaller)
+        {
+            if (distance <= stopRadius)
+            {
+                hasArrivedAtCaller = true;
+                alertWaitTimer = alertWaitDuration;
+            }
+
+            return;
+        }
+
+        alertWaitTimer -= Time.deltaTime;
+
+        if (alertWaitTimer <= 0f)
+        {
+            isAlerted = false;
+            useTarget = false;
+            hasArrivedAtCaller = false;
+        }
+    }
+
+    // ------------------------------------------------------------
     // Pemilihan behaviour utama + penentuan state
     // ------------------------------------------------------------
 
     private Vector3 CalculatePrimaryBehaviour()
     {
+        if (gunReaction == GunReaction.Panicking)
+        {
+            isFleeingFromGun = false;
+            isFleeing = false;
+            currentState = SteeringState.Flee;
+
+            return CalculatePanicFlee();
+        }
+
+        if (visionSensor != null && visionSensor.CanSeeGunDrawn)
+        {
+            isFleeingFromGun = true;
+            isFleeing = false;
+            currentState = SteeringState.Flee;
+
+            return CalculateFleeFromPlayer();
+        }
+
+        isFleeingFromGun = false;
+
         if (!useTarget || target == null)
         {
             isFleeing = false;
@@ -392,6 +501,82 @@ public class SteeringAgent : MonoBehaviour
         return awayFromTarget.normalized *
                maxSpeed *
                Mathf.Max(fleeSpeedMultiplier, 0.01f);
+    }
+
+    // ------------------------------------------------------------
+    // Vision - Flee dari player yang pegang gun
+    // ------------------------------------------------------------
+
+    // hitung arah menjauh dari player bersenjata
+    private Vector3 CalculateFleeFromPlayer()
+    {
+        Vector3 playerPosition = visionSensor.PlayerPosition;
+
+        Vector3 awayFromPlayer =
+            transform.position - playerPosition;
+
+        awayFromPlayer.y = 0f;
+
+        if (awayFromPlayer.sqrMagnitude < 0.001f)
+        {
+            return transform.forward * fleeSpeed;
+        }
+
+        return awayFromPlayer.normalized * fleeSpeed;
+    }
+
+    // tentukan level reaksi terhadap gun berdasarkan jarak
+    private void UpdateGunReaction()
+    {
+        if (visionSensor == null)
+        {
+            return;
+        }
+
+        if (gunReaction == GunReaction.None && visionSensor.CanSeeGunDrawn)
+        {
+            float distanceToPlayer =
+                Vector3.Distance(
+                    transform.position,
+                    visionSensor.PlayerPosition
+                );
+
+            if (distanceToPlayer >= fleeProximityThreshold)
+            {
+                gunReaction = GunReaction.Panicking;
+                panicTimer = panicFleeDuration;
+            }
+
+            return;
+        }
+
+        if (gunReaction == GunReaction.Panicking)
+        {
+            panicTimer -= Time.deltaTime;
+
+            if (panicTimer <= 0f)
+            {
+                gunReaction = GunReaction.None;
+            }
+        }
+    }
+
+    // hitung arah lari panik dengan kecepatan lebih tinggi
+    private Vector3 CalculatePanicFlee()
+    {
+        Vector3 playerPosition = visionSensor.PlayerPosition;
+
+        Vector3 awayFromPlayer =
+            transform.position - playerPosition;
+
+        awayFromPlayer.y = 0f;
+
+        if (awayFromPlayer.sqrMagnitude < 0.001f)
+        {
+            return transform.forward * panicFleeSpeed;
+        }
+
+        return awayFromPlayer.normalized * panicFleeSpeed;
     }
 
     // ------------------------------------------------------------
@@ -585,6 +770,18 @@ public class SteeringAgent : MonoBehaviour
 
     private float GetCurrentSpeedLimit()
     {
+        // Panic paling didahulukan, pakai panicFleeSpeed sendiri.
+        if (gunReaction == GunReaction.Panicking)
+        {
+            return panicFleeSpeed;
+        }
+
+        // Flee dari gun didahulukan, pakai fleeSpeed sendiri.
+        if (isFleeingFromGun)
+        {
+            return fleeSpeed;
+        }
+
         // Pakai flag isFleeing, bukan currentState, karena state
         // bisa berubah jadi Avoiding sambil NPC tetap kabur.
         if (isFleeing)

@@ -505,6 +505,17 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 2208195059078020338, guid: 20f9ac6bba3361748b7d72437337f1e5, type: 3}
   m_PrefabInstance: {fileID: 611757962241623142}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &735953172 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 856473387255538916, guid: 20f9ac6bba3361748b7d72437337f1e5, type: 3}
+  m_PrefabInstance: {fileID: 611757962241623142}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 69505e4fcf0282a478aa11d1021a56c1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::GunController
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
@@ -1223,18 +1234,22 @@ PrefabInstance:
       propertyPath: m_Name
       value: NPC
       objectReference: {fileID: 0}
+    - target: {fileID: 6730866115643015512, guid: 01c4d65d16cef0e479e2248f1ee79685, type: 3}
+      propertyPath: viewAngle
+      value: 90
+      objectReference: {fileID: 0}
+    - target: {fileID: 6730866115643015512, guid: 01c4d65d16cef0e479e2248f1ee79685, type: 3}
+      propertyPath: viewRadius
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 6730866115643015512, guid: 01c4d65d16cef0e479e2248f1ee79685, type: 3}
+      propertyPath: gunController
+      value: 
+      objectReference: {fileID: 735953172}
     - target: {fileID: 9009581274503110302, guid: 01c4d65d16cef0e479e2248f1ee79685, type: 3}
       propertyPath: target
       value: 
       objectReference: {fileID: 735953171}
-    - target: {fileID: 9009581274503110302, guid: 01c4d65d16cef0e479e2248f1ee79685, type: 3}
-      propertyPath: chaseMode
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9009581274503110302, guid: 01c4d65d16cef0e479e2248f1ee79685, type: 3}
-      propertyPath: useTarget
-      value: 0
-      objectReference: {fileID: 0}
     - target: {fileID: 9009581274503110302, guid: 01c4d65d16cef0e479e2248f1ee79685, type: 3}
       propertyPath: groundBoundary
       value: 
