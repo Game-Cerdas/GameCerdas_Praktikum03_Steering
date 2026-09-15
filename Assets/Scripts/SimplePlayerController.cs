@@ -9,6 +9,10 @@ public class SimplePlayerController : MonoBehaviour
     [SerializeField]
     private float turnSpeed = 10f;
 
+    [Header("Boundary")]
+    [SerializeField]
+    private GroundBoundary groundBoundary;
+
     private CharacterController controller;
 
     private void Awake()
@@ -33,6 +37,8 @@ public class SimplePlayerController : MonoBehaviour
             direction * moveSpeed * Time.deltaTime
         );
 
+        ClampToGround();
+
         if (direction.sqrMagnitude > 0.001f)
         {
             Quaternion targetRotation =
@@ -44,6 +50,26 @@ public class SimplePlayerController : MonoBehaviour
                     targetRotation,
                     turnSpeed * Time.deltaTime
                 );
+        }
+    }
+
+    // batasi posisi setelah bergerak
+    private void ClampToGround()
+    {
+        if (groundBoundary == null)
+        {
+            return;
+        }
+
+        Vector3 clampedPosition =
+            groundBoundary.ClampPosition(transform.position);
+
+        Vector3 correction =
+            clampedPosition - transform.position;
+
+        if (correction.sqrMagnitude > 0.0001f)
+        {
+            controller.Move(correction);
         }
     }
 }

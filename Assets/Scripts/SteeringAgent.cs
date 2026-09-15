@@ -97,6 +97,14 @@ public class SteeringAgent : MonoBehaviour
     [SerializeField]
     private float separationWeight = 1.5f;
 
+    [Header("Boundary")]
+
+    [SerializeField]
+    private GroundBoundary groundBoundary;
+
+    [SerializeField]
+    private float boundaryEscapeWeight = 3f;
+
     private static readonly List<SteeringAgent> activeAgents =
         new List<SteeringAgent>();
 
@@ -158,6 +166,9 @@ public class SteeringAgent : MonoBehaviour
 
         desiredVelocity =
             ApplyObstacleAvoidance(desiredVelocity);
+
+        desiredVelocity =
+            ApplyBoundaryEscape(desiredVelocity);
 
         float speedLimit = GetCurrentSpeedLimit();
 
@@ -533,6 +544,41 @@ public class SteeringAgent : MonoBehaviour
         return desiredVelocity;
     }
 
+    // Gabungkan dorongan menjauh dari tepi map
+    private Vector3 ApplyBoundaryEscape(
+        Vector3 desiredVelocity)
+    {
+        if (groundBoundary == null)
+        {
+            return desiredVelocity;
+        }
+
+        Vector3 escapeDirection =
+            groundBoundary.GetEscapeDirection(
+                transform.position
+            );
+
+        if (escapeDirection.sqrMagnitude < 0.0001f)
+        {
+            return desiredVelocity;
+        }
+
+        Vector3 combined =
+            desiredVelocity +
+            escapeDirection.normalized *
+            boundaryEscapeWeight;
+
+        combined.y = 0f;
+
+        float desiredSpeed =
+            Mathf.Max(
+                desiredVelocity.magnitude,
+                maxSpeed * 0.5f
+            );
+
+        return combined.normalized * desiredSpeed;
+    }
+
     // ------------------------------------------------------------
     // Gerak & rotasi
     // ------------------------------------------------------------
@@ -550,10 +596,17 @@ public class SteeringAgent : MonoBehaviour
         return maxSpeed;
     }
 
+    // terapkan movement dan batasi ke ground
     private void ApplyMovement()
     {
         transform.position +=
             velocity * Time.deltaTime;
+
+        if (groundBoundary != null)
+        {
+            transform.position =
+                groundBoundary.ClampPosition(transform.position);
+        }
     }
 
     private void UpdateRotation()
